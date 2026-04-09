@@ -1,0 +1,25 @@
+{
+  "name": "multi-channel-onboarding-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+
+    "db:generate": "cd server && npx prisma generate --schema=./prisma/schema.prisma",
+    "db:push": "cd server && npx prisma db push --schema=./prisma/schema.prisma",
+    "db:migrate": "cd server && npx prisma migrate dev --schema=./prisma/schema.prisma",
+    "db:studio": "cd server && npx prisma studio --schema=./prisma/schema.prisma"
+  },
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -1,0 +1,11 @@
+name,phone,email,city,vehicle_type,vehicle_count,preferred_channel
+Rajesh Kumar,9876543210,rajesh.kumar@gmail.com,Delhi,THREE_WHEELER,2,WHATSAPP
+Priya Sharma,8765432109,priya.sharma@yahoo.com,Mumbai,TWO_WHEELER,1,EMAIL
+Vikram Singh,9654321087,vikram.singh@outlook.com,Bangalore,FOUR_WHEELER,3,WHATSAPP
+Sunita Devi,9543210976,,Hyderabad,THREE_WHEELER,1,CALL
+Amit Patel,9432109865,amit.patel@gmail.com,Ahmedabad,TWO_WHEELER,2,WHATSAPP
+Kavya Reddy,9321098754,kavya.reddy@gmail.com,Chennai,FOUR_WHEELER,1,EMAIL
+Suresh Yadav,9210987643,,Lucknow,THREE_WHEELER,4,WHATSAPP
+Meena Kumari,9109876532,meena.k@gmail.com,Jaipur,TWO_WHEELER,1,WHATSAPP
+Ravi Teja,9098765421,ravi.teja@gmail.com,Pune,FOUR_WHEELER,2,API
+Lakshmi Nair,9987654310,lakshmi.nair@gmail.com,Kochi,TWO_WHEELER,1,EMAIL

@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  DOCUMENTS_PENDING
+  DOCUMENTS_SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  ONBOARDED
+}
+
+enum Channel {
+  EMAIL
+  WHATSAPP
+  CALL
+  API
+  SYSTEM
+  CSV
+}
+
+enum DocumentStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum VehicleType {
+  TWO_WHEELER
+  THREE_WHEELER
+  FOUR_WHEELER
+  HEAVY_VEHICLE
+}
+
+enum UserRole {
+  ADMIN
+  DRIVER
+}
+
+enum LeadPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// ─── ORGANIZATION (Multi-Tenant) ───────────────────────
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users     User[]
+  leads     Lead[]
+
+  @@map("organizations")
+}
+
+// ─── USER ──────────────────────────────────────────────
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  phone     String?
+  role      UserRole @default(DRIVER)
+  orgId     String?  @map("org_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  driverLead Lead?     @relation("DriverSelf")
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+// ─── LEAD ──────────────────────────────────────────────
+model Lead {
+  id               String         @id @default(uuid())
+  name             String
+  phone            String         @unique
+  email            String?
+  city             String?
+  vehicleType      VehicleType?   @map("vehicle_type")
+  vehicleCount     Int?           @map("vehicle_count")
+  aadhaarStatus    DocumentStatus @default(NOT_SUBMITTED) @map("aadhaar_status")
+  aadhaarUrl       String?        @map("aadhaar_url")
+  aadhaarRejectReason String?     @map("aadhaar_reject_reason")
+  bankStatus       DocumentStatus @default(NOT_SUBMITTED) @map("bank_status")
+  bankUrl          String?        @map("bank_url")
+  bankRejectReason String?        @map("bank_reject_reason")
+  rcStatus         DocumentStatus @default(NOT_SUBMITTED) @map("rc_status")
+  rcUrl            String?        @map("rc_url")
+  rcRejectReason   String?        @map("rc_reject_reason")
+  appInstalled     Boolean        @default(false) @map("app_installed")
+  preferredChannel Channel        @default(WHATSAPP) @map("preferred_channel")
+  currentStage     LeadStage      @default(NEW) @map("current_stage")
+  leadScore        Int            @default(0) @map("lead_score")
+  priority         LeadPriority   @default(LOW)
+  confidence       Float?
+  driverId         String?        @unique @map("driver_id")
+  orgId            String?        @map("org_id")
+  escalated        Boolean        @default(false)
+  slaDeadline      DateTime?      @map("sla_deadline")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  onboardedAt      DateTime?      @map("onboarded_at")
+
+  driver           User?          @relation("DriverSelf", fields: [driverId], references: [id], onDelete: SetNull)
+  org              Organization?  @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  events           LeadEvent[]
+  stateHistory     LeadStateHistory[]
+  agentOutputs     AgentOutput[]
+  communicationLogs CommunicationLog[]
+  timelines        LeadTimeline[]
+  promptLogs       PromptLog[]
+
+  @@map("leads")
+}
+
+// ─── AUDIT LOG ─────────────────────────────────────────
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  action    String   // e.g. DOC_UPLOAD, DOC_APPROVE, DOC_REJECT, STAGE_CHANGE, AI_OVERRIDE, LOGIN
+  entity    String   // e.g. lead, document, user
+  entityId  String?  @map("entity_id")
+  details   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+// ─── TIMELINE ──────────────────────────────────────────
+model LeadTimeline {
+  id        String   @id @default(uuid())
+  leadId    String   @map("lead_id")
+  eventType String   @map("event_type")
+  message   String
+  source    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  @@map("lead_timelines")
+}
+
+model PromptLog {
+  id        String   @id @default(uuid())
+  leadId    String   @map("lead_id")
+  agentName String   @map("agent_name")
+  prompt    String   @db.Text
+  response  String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  @@map("prompt_logs")
+}
+
+model WebhookSubscription {
+  id        String   @id @default(uuid())
+  url       String
+  event     String
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@map("webhook_subscriptions")
+}
+
+model LeadEvent {
+  id           String   @id @default(uuid())
+  leadId       String   @map("lead_id")
+  source       Channel
+  rawInput     String   @map("raw_input")
+  parsedOutput Json?    @map("parsed_output")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("lead_events")
+}
+
+model LeadStateHistory {
+  id            String   @id @default(uuid())
+  leadId        String   @map("lead_id")
+  previousState Json     @map("previous_state")
+  newState      Json     @map("new_state")
+  changedBy     String   @map("changed_by")
+  timestamp     DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("lead_state_history")
+}
+
+model AgentOutput {
+  id         String   @id @default(uuid())
+  leadId     String   @map("lead_id")
+  agentName  String   @map("agent_name")
+  outputJson Json     @map("output_json")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("agent_outputs")
+}
+
+model CommunicationLog {
+  id        String   @id @default(uuid())
+  leadId    String   @map("lead_id")
+  channel   Channel
+  message   String
+  direction String
+  timestamp DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("communication_logs")
+}
