@@ -54,7 +54,7 @@ interface ProcessResult {
 
 export default function SimulatePage() {
   const [channel, setChannel] = useState<Channel>('WHATSAPP');
-  const [phone, setPhone] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [input, setInput] = useState('');
   const [eventResult, setEventResult] = useState<EventResult | null>(null);
   const [processResult, setProcessResult] = useState<ProcessResult | null>(null);
@@ -65,10 +65,42 @@ export default function SimulatePage() {
   const cfg = CHANNEL_CONFIG[channel];
 
   const handleSubmit = async () => {
-    if (!phone.trim() || !input.trim()) {
-      setError('Driver identity and interaction content are required.');
+    let finalPhone = undefined;
+    let finalEmail = undefined;
+
+    // Validate and Parse based on Channel
+    if (channel === 'API') {
+      try {
+        const parsed = JSON.parse(input);
+        if (parsed.phone) finalPhone = parsed.phone;
+        if (parsed.email) finalEmail = parsed.email;
+        if (!finalPhone && !finalEmail) throw new Error('JSON must contain "phone" or "email"');
+      } catch (e) {
+        setError('API/JSON error: ' + (e as Error).message);
+        return;
+      }
+    } else if (channel === 'WHATSAPP') {
+      // Simulate automatic WhatsApp phone extraction
+      finalPhone = identifier.trim() || '9876543210'; 
+    } else {
+      // Email or Call processing generic identifier
+      const val = identifier.trim();
+      if (!val) {
+        setError('Driver identification (Phone or Email) is required for this channel.');
+        return;
+      }
+      if (val.includes('@')) {
+        finalEmail = val;
+      } else {
+        finalPhone = val;
+      }
+    }
+
+    if (!input.trim()) {
+      setError('Interaction content is required.');
       return;
     }
+    
     setError('');
     setEventResult(null);
     setProcessResult(null);
@@ -77,7 +109,8 @@ export default function SimulatePage() {
 
     try {
       const evtRes = await api.postEvent({
-        phone: phone.trim(),
+        phone: finalPhone,
+        email: finalEmail,
         source: channel,
         rawInput: input.trim(),
       });
@@ -133,17 +166,25 @@ export default function SimulatePage() {
           <section className="card p-6 space-y-5">
             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">2. Interaction Details</h2>
             
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Driver Phone Number</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Ex: 9876543210"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-              />
-              <p className="text-[10px] text-slate-400 mt-1.5 italic">The driver profile must exist in the system to verify state updates.</p>
-            </div>
+            {channel !== 'WHATSAPP' && channel !== 'API' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Identifier (Phone / Email)</label>
+                <input
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="Enter phone OR email"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                />
+                <p className="text-[10px] text-slate-400 mt-1.5 italic">Drivers will be auto-created if they don't exist.</p>
+              </div>
+            )}
+            
+            {(channel === 'WHATSAPP' || channel === 'API') && (
+              <div className="p-3 bg-blue-50 text-blue-700 text-xs rounded-lg font-medium">
+                💡 Identification is automatically extracted for <strong>{channel}</strong> flows.
+              </div>
+            )}
 
             <div>
               <div className="flex justify-between items-end mb-1">

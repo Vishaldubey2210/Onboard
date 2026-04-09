@@ -127,11 +127,11 @@ export const api = {
   getAnalytics: () =>
     apiFetch<{ success: boolean; data: any }>(`/analytics`),
 
-  // Events
-  postEvent: (payload: { leadId?: string; phone?: string; source: string; rawInput: string }) =>
-    apiFetch<{ success: boolean; eventId: string; leadId: string }>('/event', {
+  // Interaction Simulator
+  postEvent: (data: { leadId?: string; phone?: string; email?: string; name?: string; source: string; rawInput: string }) =>
+    apiFetch<{ success: boolean; eventId: string; leadId: string; identifiedBy: string }>('/event', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(data),
     }),
 
   // Processing
