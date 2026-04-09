@@ -112,6 +112,12 @@ model Lead {
   slaDeadline      DateTime?      @map("sla_deadline")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
+  lastUpdatedFrom  Channel?       @map("last_updated_from")
+  identifiedBy     String?
+  aadhaarSource    Channel?       @map("aadhaar_source")
+  bankSource       Channel?       @map("bank_source")
+  rcSource         Channel?       @map("rc_source")
+
   onboardedAt      DateTime?      @map("onboarded_at")
 
   driver           User?          @relation("DriverSelf", fields: [driverId], references: [id], onDelete: SetNull)

@@ -60,39 +60,40 @@ export default function SimulatePage() {
   const [processResult, setProcessResult] = useState<ProcessResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [conflictDetected, setConflictDetected] = useState(false);
   const [step, setStep] = useState<'idle' | 'event' | 'processing' | 'done'>('idle');
 
   const cfg = CHANNEL_CONFIG[channel];
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (forceMergeOverride = false) => {
     let finalPhone = undefined;
     let finalEmail = undefined;
+
+    // Unified Identifier Extraction
+    const val = identifier.trim();
+    if (!val && channel !== 'API') {
+      setError(`Driver identification (Phone or Email) is required to target the correct Lead in the database.`);
+      return;
+    }
+
+    if (val) {
+      if (val.includes('@')) {
+        finalEmail = val;
+      } else {
+        finalPhone = val;
+      }
+    }
 
     // Validate and Parse based on Channel
     if (channel === 'API') {
       try {
         const parsed = JSON.parse(input);
-        if (parsed.phone) finalPhone = parsed.phone;
-        if (parsed.email) finalEmail = parsed.email;
-        if (!finalPhone && !finalEmail) throw new Error('JSON must contain "phone" or "email"');
+        if (!finalPhone && parsed.phone) finalPhone = parsed.phone;
+        if (!finalEmail && parsed.email) finalEmail = parsed.email;
+        if (!finalPhone && !finalEmail) throw new Error('You must provide an Identifier above, or include "phone" or "email" in JSON.');
       } catch (e) {
         setError('API/JSON error: ' + (e as Error).message);
         return;
-      }
-    } else if (channel === 'WHATSAPP') {
-      // Simulate automatic WhatsApp phone extraction
-      finalPhone = identifier.trim() || '9876543210'; 
-    } else {
-      // Email or Call processing generic identifier
-      const val = identifier.trim();
-      if (!val) {
-        setError('Driver identification (Phone or Email) is required for this channel.');
-        return;
-      }
-      if (val.includes('@')) {
-        finalEmail = val;
-      } else {
-        finalPhone = val;
       }
     }
 
@@ -102,6 +103,7 @@ export default function SimulatePage() {
     }
     
     setError('');
+    setConflictDetected(false);
     setEventResult(null);
     setProcessResult(null);
     setLoading(true);
@@ -113,6 +115,7 @@ export default function SimulatePage() {
         email: finalEmail,
         source: channel,
         rawInput: input.trim(),
+        forceMerge: forceMergeOverride,
       });
       setEventResult(evtRes);
       setStep('processing');
@@ -120,8 +123,11 @@ export default function SimulatePage() {
       const procRes = await api.processLead(evtRes.leadId, input.trim(), channel);
       setProcessResult(procRes.result);
       setStep('done');
-    } catch (e) {
-      setError((e as Error).message);
+    } catch (e: any) {
+      if (e.code === 'IDENTITY_CONFLICT') {
+        setConflictDetected(true);
+      }
+      setError(e.message);
       setStep('idle');
     } finally {
       setLoading(false);
@@ -166,25 +172,19 @@ export default function SimulatePage() {
           <section className="card p-6 space-y-5">
             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">2. Interaction Details</h2>
             
-            {channel !== 'WHATSAPP' && channel !== 'API' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Identifier (Phone / Email)</label>
-                <input
-                  type="text"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Enter phone OR email"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                />
-                <p className="text-[10px] text-slate-400 mt-1.5 italic">Drivers will be auto-created if they don't exist.</p>
-              </div>
-            )}
-            
-            {(channel === 'WHATSAPP' || channel === 'API') && (
-              <div className="p-3 bg-blue-50 text-blue-700 text-xs rounded-lg font-medium">
-                💡 Identification is automatically extracted for <strong>{channel}</strong> flows.
-              </div>
-            )}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Lead Identifier (Phone / Email)</label>
+              <input
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="Ex: 9876543210 or driver@email.com"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+              />
+              <p className="text-[10px] text-slate-400 mt-1.5 italic">
+                <strong>Testing Notice:</strong> Regardless of channel, provide the phone/email to explicitly target and update that Lead's database record. Drivers will be auto-created if they don't exist.
+              </p>
+            </div>
 
             <div>
               <div className="flex justify-between items-end mb-1">
@@ -216,26 +216,51 @@ export default function SimulatePage() {
               )}
             </div>
 
-            {error && (
+            {error && !conflictDetected && (
               <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg font-medium">
                 ⚠️ {error}
               </div>
             )}
 
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full h-12 bg-slate-900 hover:bg-black text-white font-bold rounded-xl transition-all shadow-lg shadow-slate-200 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                  Processing Interaction...
-                </span>
-              ) : (
-                <>🚀 Run Simulation</>
-              )}
-            </button>
+            {conflictDetected && (
+              <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl animate-in fade-in zoom-in duration-300 shadow-sm border-l-4 border-l-orange-500">
+                <h3 className="text-orange-800 font-bold text-sm mb-1">⚠️ Identity Conflict Detected</h3>
+                <p className="text-orange-700 text-xs mb-3">
+                  The provided phone number and email address correspond to entirely different leads in the system. Proceeding will force a manual merge of these identities.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleSubmit(true)}
+                    className="flex-1 px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg transition-all"
+                  >
+                    Force Import / Merge Data
+                  </button>
+                  <button
+                    onClick={() => { setConflictDetected(false); setError(''); }}
+                    className="flex-1 px-3 py-2 bg-white border border-orange-200 text-orange-700 hover:bg-orange-50 text-xs font-bold rounded-lg transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!conflictDetected && (
+              <button
+                onClick={() => handleSubmit(false)}
+                disabled={loading}
+                className="w-full h-12 bg-slate-900 hover:bg-black text-white font-bold rounded-xl transition-all shadow-lg shadow-slate-200 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    Processing Interaction...
+                  </span>
+                ) : (
+                  <>🚀 Run Simulation</>
+                )}
+              </button>
+            )}
           </section>
         </div>
 

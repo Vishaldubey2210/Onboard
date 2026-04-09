@@ -11,6 +11,7 @@ const EventSchema = z.object({
   leadId: z.string().uuid().optional(),
   phone: z.string().optional(),
   email: z.string().optional(),
+  forceMerge: z.boolean().optional(),
   source: z.enum(['EMAIL', 'WHATSAPP', 'CALL', 'API', 'SYSTEM', 'CSV']),
   rawInput: z.string().min(1, 'rawInput cannot be empty'),
 }).refine(data => data.leadId || data.phone || data.email, {
@@ -25,7 +26,7 @@ router.post('/event', authenticateToken, async (req: Request, res: Response) => 
     return res.status(400).json({ error: 'Validation failed', details: parsed.error.errors });
   }
 
-  const { leadId, phone, email, source, rawInput } = parsed.data;
+  const { leadId, phone, email, source, rawInput, forceMerge } = parsed.data;
 
   // Validation Rule
   if (!leadId && !phone && !email) {
@@ -33,39 +34,58 @@ router.post('/event', authenticateToken, async (req: Request, res: Response) => 
   }
 
   let lead = null;
-  let identifiedBy: 'phone' | 'email' | 'leadId' | 'auto_created' = 'auto_created';
+  let identifiedBy: 'phone' | 'email' | 'leadId' | 'auto_created' | 'phone_and_email' | 'phone_force_merge' = 'auto_created';
 
-  // 1. By Lead ID
+  // Strict identity logic
+  const normalizedPhone = phone ? phone.replace(/\D/g, '').slice(-10) : null;
+  const normalizedEmail = email ? email.toLowerCase().trim() : null;
+
+  const phoneMatch = normalizedPhone ? await prisma.lead.findFirst({ where: { phone: normalizedPhone } }) : null;
+  const emailMatch = normalizedEmail ? await prisma.lead.findFirst({ where: { email: normalizedEmail } }) : null;
+
+  // By Lead ID (Highest priority override)
   if (leadId) {
     lead = await prisma.lead.findUnique({ where: { id: leadId } });
     if (lead) identifiedBy = 'leadId';
+  } else {
+    // Identity Conflict Checking Rule
+    if (phoneMatch && emailMatch && phoneMatch.id !== emailMatch.id) {
+      if (!forceMerge) {
+        return res.status(409).json({ 
+          error: 'Identity Conflict: phone and email belong to different leads',
+          code: 'IDENTITY_CONFLICT' 
+        });
+      } else {
+        // Force merge: Select phone match as survivor
+        lead = phoneMatch;
+        identifiedBy = 'phone_force_merge';
+      }
+    } else if (phoneMatch && emailMatch && phoneMatch.id === emailMatch.id) {
+      lead = phoneMatch;
+      identifiedBy = 'phone_and_email';
+    } else if (phoneMatch) {
+      lead = phoneMatch;
+      identifiedBy = 'phone';
+    } else if (emailMatch) {
+      lead = emailMatch;
+      identifiedBy = 'email';
+    }
   }
 
-  // 2. By Phone
-  if (!lead && phone) {
-    const normalized = phone.replace(/\D/g, '').slice(-10);
-    lead = await prisma.lead.findFirst({ where: { phone: normalized } });
-    if (lead) identifiedBy = 'phone';
-  }
-
-  // 3. By Email
-  if (!lead && email) {
-    lead = await prisma.lead.findFirst({ where: { email: email.toLowerCase().trim() } });
-    if (lead) identifiedBy = 'email';
-  }
-
-  // 4. Auto-Create
+  // Auto-Create
   if (!lead) {
     identifiedBy = 'auto_created';
-    const fallbackPhone = phone ? phone.replace(/\D/g, '').slice(-10) : `auto_${Math.random().toString().slice(2, 12)}`;
+    const fallbackPhone = normalizedPhone || `auto_${Math.random().toString().slice(2, 12)}`;
     
     lead = await prisma.lead.create({
       data: {
         name: "Unknown Caller",
         phone: fallbackPhone,
-        email: email ? email.toLowerCase().trim() : null,
+        email: normalizedEmail,
         preferredChannel: source as Prisma.LeadCreateInput['preferredChannel'],
         orgId: user.orgId,
+        lastUpdatedFrom: source as any,
+        identifiedBy,
       }
     });
 

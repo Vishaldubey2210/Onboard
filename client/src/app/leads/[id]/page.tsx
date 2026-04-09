@@ -150,6 +150,9 @@ export default function LeadDetailPage() {
           <div className="flex items-center gap-2 mt-1">
             <StageBadge stage={lead.currentStage} />
             <span className="text-sm text-slate-500 font-mono">{lead.phone}</span>
+            {lead.lastUpdatedFrom && (
+               <span className="text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-100 font-bold tracking-wide uppercase ml-2">Last Sync: {lead.lastUpdatedFrom}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -192,13 +195,16 @@ export default function LeadDetailPage() {
       <Section title="Document Status">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
-            { id: 'aadhaar', label: 'Aadhaar Card', status: lead.aadhaarStatus, url: (lead as any).aadhaarUrl, rejectReason: (lead as any).aadhaarRejectReason },
-            { id: 'bank', label: 'Bank Details', status: lead.bankStatus, url: (lead as any).bankUrl, rejectReason: (lead as any).bankRejectReason },
-            { id: 'rc', label: 'Vehicle RC', status: lead.rcStatus, url: (lead as any).rcUrl, rejectReason: (lead as any).rcRejectReason },
-          ].map(({ id: docId, label, status, url, rejectReason }) => (
+            { id: 'aadhaar', label: 'Aadhaar Card', status: lead.aadhaarStatus, url: (lead as any).aadhaarUrl, rejectReason: (lead as any).aadhaarRejectReason, source: lead.aadhaarSource },
+            { id: 'bank', label: 'Bank Details', status: lead.bankStatus, url: (lead as any).bankUrl, rejectReason: (lead as any).bankRejectReason, source: lead.bankSource },
+            { id: 'rc', label: 'Vehicle RC', status: lead.rcStatus, url: (lead as any).rcUrl, rejectReason: (lead as any).rcRejectReason, source: lead.rcSource },
+          ].map(({ id: docId, label, status, url, rejectReason, source }) => (
             <div key={label} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-3">
               <div className="flex justify-between items-start">
-                <div className="font-medium text-slate-900">{label}</div>
+                <div>
+                  <div className="font-medium text-slate-900">{label}</div>
+                  {source && <div className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-widest font-bold">via {source}</div>}
+                </div>
                 <DocStatusBadge status={status} />
               </div>
               

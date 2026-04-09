@@ -21,7 +21,9 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.error ?? `HTTP ${res.status}`);
+    const err = new Error(data.error ?? `HTTP ${res.status}`);
+    if (data.code) (err as any).code = data.code;
+    throw err;
   }
 
   return data as T;
@@ -44,6 +46,11 @@ export interface Lead {
   leadScore: number;
   createdAt: string;
   updatedAt: string;
+  lastUpdatedFrom: string | null;
+  identifiedBy: string | null;
+  aadhaarSource: string | null;
+  bankSource: string | null;
+  rcSource: string | null;
 }
 
 export interface LeadDetail extends Lead {
@@ -128,7 +135,7 @@ export const api = {
     apiFetch<{ success: boolean; data: any }>(`/analytics`),
 
   // Interaction Simulator
-  postEvent: (data: { leadId?: string; phone?: string; email?: string; name?: string; source: string; rawInput: string }) =>
+  postEvent: (data: { leadId?: string; phone?: string; email?: string; name?: string; source: string; rawInput: string; forceMerge?: boolean }) =>
     apiFetch<{ success: boolean; eventId: string; leadId: string; identifiedBy: string }>('/event', {
       method: 'POST',
       body: JSON.stringify(data),

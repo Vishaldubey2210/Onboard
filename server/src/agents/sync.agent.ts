@@ -26,41 +26,46 @@ export async function runSyncAgent(
   const previousState = { ...currentLead } as Record<string, unknown>;
 
   // Build update payload from reconciliation decision
-  const updateData: Prisma.LeadUpdateInput = {};
+  const updateData: Prisma.LeadUpdateInput = {
+    lastUpdatedFrom: source as any
+  };
 
   if (reconciliation.should_update && reconciliation.fields_to_update) {
     const f = reconciliation.fields_to_update;
 
-    if (f.name && f.name !== currentLead.name) {
+    if (f.name && (!currentLead.name || currentLead.name === 'Unknown Caller') && f.name !== currentLead.name) {
       updateData.name = f.name;
       fieldsChanged.push('name');
     }
-    if (f.email && f.email !== currentLead.email) {
+    if (!currentLead.email && f.email) {
       updateData.email = f.email;
       fieldsChanged.push('email');
     }
-    if (f.city && f.city !== currentLead.city) {
+    if (!currentLead.city && f.city) {
       updateData.city = f.city;
       fieldsChanged.push('city');
     }
-    if (f.vehicleType && f.vehicleType !== currentLead.vehicleType) {
+    if (!currentLead.vehicleType && f.vehicleType) {
       updateData.vehicleType = f.vehicleType as Lead['vehicleType'];
       fieldsChanged.push('vehicleType');
     }
-    if (f.vehicleCount && f.vehicleCount !== currentLead.vehicleCount) {
+    if (!currentLead.vehicleCount && f.vehicleCount) {
       updateData.vehicleCount = f.vehicleCount;
       fieldsChanged.push('vehicleCount');
     }
-    if (f.aadhaarStatus && f.aadhaarStatus !== currentLead.aadhaarStatus) {
+    if (currentLead.aadhaarStatus === 'NOT_SUBMITTED' && f.aadhaarStatus && f.aadhaarStatus !== 'NOT_SUBMITTED') {
       updateData.aadhaarStatus = f.aadhaarStatus as Lead['aadhaarStatus'];
+      (updateData as any).aadhaarSource = source;
       fieldsChanged.push('aadhaarStatus');
     }
-    if (f.bankStatus && f.bankStatus !== currentLead.bankStatus) {
+    if (currentLead.bankStatus === 'NOT_SUBMITTED' && f.bankStatus && f.bankStatus !== 'NOT_SUBMITTED') {
       updateData.bankStatus = f.bankStatus as Lead['bankStatus'];
+      (updateData as any).bankSource = source;
       fieldsChanged.push('bankStatus');
     }
-    if (f.rcStatus && f.rcStatus !== currentLead.rcStatus) {
+    if (currentLead.rcStatus === 'NOT_SUBMITTED' && f.rcStatus && f.rcStatus !== 'NOT_SUBMITTED') {
       updateData.rcStatus = f.rcStatus as Lead['rcStatus'];
+      (updateData as any).rcSource = source;
       fieldsChanged.push('rcStatus');
     }
     if (f.appInstalled !== undefined && f.appInstalled !== currentLead.appInstalled) {
@@ -72,6 +77,14 @@ export async function runSyncAgent(
       fieldsChanged.push('preferredChannel');
     }
   }
+
+  // Generate explicit timeline tracking descriptions
+  const timelineEvents: Prisma.LeadTimelineCreateManyInput[] = fieldsChanged.map(field => ({
+    leadId: currentLead.id,
+    eventType: 'FIELD_UPDATED',
+    message: `${source}: Updated ${field} with new information.`,
+    source: source
+  }));
 
   // Always update stage and score from qualification
   const newStage = qualification.stage as Lead['currentStage'];
@@ -121,7 +134,12 @@ export async function runSyncAgent(
       },
     });
 
-    // 3. Save agent outputs
+    // 3. Save explicit timeline events
+    if (timelineEvents.length > 0) {
+      await tx.leadTimeline.createMany({ data: timelineEvents });
+    }
+
+    // 4. Save agent outputs
     await tx.agentOutput.createMany({
       data: [
         {
